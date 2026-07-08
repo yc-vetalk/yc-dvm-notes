@@ -95,16 +95,19 @@ function renderList(weight, filter){
   listEl.innerHTML = filtered.map(d => {
     const doseMin = round2(weight * d.doseMin);
     const doseMax = round2(weight * d.doseMax);
-    const doseText = d.doseMin === d.doseMax
-      ? `${doseMin} <span class="unit">mg</span>`
-      : `${doseMin} – ${doseMax} <span class="unit">mg</span>`;
+    const isPercentBased = d.doseMin === 0 && d.doseMax === 0;
+    const doseText = isPercentBased
+      ? `依吸入濃度 (vol%) 給予`
+      : (d.doseMin === d.doseMax
+        ? `${doseMin} <span class="unit">mg</span>`
+        : `${doseMin} – ${doseMax} <span class="unit">mg</span>`);
     return `<div class="drug-card">
       <div class="row1">
         <span class="name">${d.name}</span>
         <span class="cat">${d.cat}</span>
       </div>
       <div class="dose">${doseText}</div>
-      <div class="meta">${d.context}　｜　${d.route}　｜　${d.freq}　｜　${d.doseMin}${d.doseMin!==d.doseMax ? "–"+d.doseMax : ""} mg/kg</div>
+      <div class="meta">${d.context}　｜　${d.route}　｜　${d.freq}${isPercentBased ? "" : `　｜　${d.doseMin}${d.doseMin!==d.doseMax ? "–"+d.doseMax : ""} mg/kg`}</div>
       ${d.caution ? `<div class="caution"><b>注意：</b>${d.caution}</div>` : ""}
     </div>`;
   }).join("");

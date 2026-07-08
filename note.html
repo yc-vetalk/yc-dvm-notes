@@ -98,6 +98,31 @@ function renderMeta(meta, title){
   metaEl.innerHTML = html;
 }
 
+// 把筆記內文裡的相對連結（如 ../Dexmedetomidine_使用時機.md、../../../01_藥物筆記/藥物資料庫.xlsx）
+// 換算成相對於「這篇筆記在 repo 裡的實際目錄」的絕對路徑，再套用跟首頁一樣的轉址規則
+function resolveRelativeLink(currentPath, href){
+  if(/^https?:\/\//.test(href) || href.startsWith("#")) return null; // 外部連結/錨點不處理
+  const dirSegs = currentPath.split("/").slice(0, -1);
+  const hrefSegs = href.split("/");
+  const stack = [...dirSegs];
+  for(const seg of hrefSegs){
+    if(seg === "." || seg === "") continue;
+    if(seg === "..") stack.pop();
+    else stack.push(seg);
+  }
+  const resolved = stack.join("/");
+  if(resolved === "01_藥物筆記/藥物資料庫.xlsx") return "drug.html";
+  if(resolved.endsWith(".md")) return "note.html?path=" + encodeURIComponent(resolved);
+  return RAW_BASE + resolved.split("/").map(encodeURIComponent).join("/");
+}
+
+function fixRelativeLinks(container, currentPath){
+  container.querySelectorAll("a[href]").forEach(a => {
+    const resolved = resolveRelativeLink(currentPath, a.getAttribute("href"));
+    if(resolved){ a.setAttribute("href", resolved); a.setAttribute("target", "_blank"); }
+  });
+}
+
 async function load(){
   const params = new URLSearchParams(location.search);
   const path = params.get("path");
@@ -116,6 +141,7 @@ async function load(){
     document.title = filename + " — Vet_note";
     renderMeta(meta, meta["主題"] || meta["藥名"] || filename);
     contentEl.innerHTML = marked.parse(body);
+    fixRelativeLinks(contentEl, path);
   }catch(err){
     contentEl.innerHTML = `<div class="state">找不到這篇筆記，或讀取失敗。<br><a href="首頁.html">回首頁</a></div>`;
   }

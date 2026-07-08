@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>Vet_note 知識庫入口</title>
+<style>
+  :root{
+    --bg:#f6f7fb; --card:#ffffff; --ink:#1f2430; --muted:#6b7280;
+    --line:#e5e7eb; --accent:#3b5bdb; --accent-soft:#eef1ff;
+    --tag:#eef2ff; --tag-ink:#3b5bdb;
+    --status-active:#e6f4ea; --status-active-ink:#1e7e34;
+    --status-done:#eceff1; --status-done-ink:#607d8b;
+    --status-surgery:#fff4e5; --status-surgery-ink:#b8860b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:"PingFang TC","Microsoft JhengHei",Arial,sans-serif;
+    background:var(--bg); color:var(--ink);
+  }
+  header{ padding:36px 24px 20px; text-align:center; }
+  header h1{ margin:0 0 6px; font-size:26px; }
+  header p{ margin:0; color:var(--muted); font-size:14px; }
+
+  .search-wrap{ max-width:640px; margin:20px auto 8px; padding:0 16px; }
+  #search{
+    width:100%; padding:12px 16px; border-radius:10px; border:1px solid var(--line);
+    font-size:15px; background:var(--card);
+  }
+  #search:focus{ outline:2px solid var(--accent); }
+
+  main{ max-width:1040px; margin:0 auto; padding:12px 16px 60px; }
+
+  .major-section{
+    margin-top:38px; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px 22px;
+  }
+  .major-section > h2{ font-size:17px; margin:0 0 4px; }
+  .major-section > .major-desc{ font-size:12px; color:var(--muted); margin:0 0 16px; }
+
+  .subcat{ margin-top:16px; }
+  .subcat:first-of-type{ margin-top:4px; }
+  .subcat-label{
+    font-size:12px; font-weight:600; color:var(--accent); text-transform:none;
+    margin-bottom:8px; display:flex; align-items:center; gap:6px;
+  }
+  .subcat-label .n{ color:var(--muted); font-weight:normal; }
+
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; }
+
+  .card{
+    background:var(--bg); border:1px solid var(--line); border-radius:10px;
+    padding:13px 14px; transition:box-shadow .15s, transform .15s; text-decoration:none; color:inherit; display:block;
+  }
+  .card:hover{ box-shadow:0 6px 16px rgba(0,0,0,.07); transform:translateY(-1px); }
+  .card .title{ font-weight:600; font-size:14px; margin-bottom:5px; }
+  .card .desc{ font-size:12.5px; color:var(--muted); margin-bottom:8px; line-height:1.5; }
+  .tags{ display:flex; flex-wrap:wrap; gap:5px; }
+  .tag{ background:var(--tag); color:var(--tag-ink); font-size:10.5px; padding:2px 7px; border-radius:999px; }
+
+  .empty-hint{
+    color:var(--muted); font-size:12.5px; padding:10px 4px;
+  }
+
+  table{ width:100%; border-collapse:collapse; background:var(--bg); border-radius:10px; overflow:hidden; border:1px solid var(--line); }
+  th,td{ text-align:left; padding:10px 12px; font-size:13px; border-bottom:1px solid var(--line); }
+  th{ background:var(--accent-soft); color:var(--accent); font-weight:600; }
+  tr:last-child td{ border-bottom:none; }
+  .empty-row td{ color:var(--muted); font-style:italic; }
+  .status{ padding:2px 10px; border-radius:999px; font-size:12px; }
+  .status.追蹤中{ background:var(--status-active); color:var(--status-active-ink); }
+  .status.已結案{ background:var(--status-done); color:var(--status-done-ink); }
+  .status.待手術{ background:var(--status-surgery); color:var(--status-surgery-ink); }
+
+  footer{ text-align:center; color:var(--muted); font-size:12px; padding:24px 0 40px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🩺 Vet_note 知識庫入口</h1>
+  <p>藥物筆記・Case紀錄・日常心得・技術與判讀　｜　最後更新：2026-07-09</p>
+</header>
+
+<div class="search-wrap">
+  <input id="search" type="text" placeholder="搜尋關鍵字，例如：Carprofen、食道狹窄、stay suture...">
+</div>
+
+<main>
+
+  <section class="major-section">
+    <h2>📋 Case 進度總覽</h2>
+    <table>
+      <thead><tr><th>物種</th><th>姓名</th><th>主要問題</th><th>狀態</th><th>建立日期</th></tr></thead>
+      <tbody id="case-table">
+        <tr class="empty-row"><td colspan="5">尚無 Case，建立後會自動列於此</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="major-section" id="drug-section">
+    <h2>💊 藥物筆記</h2>
+    <p class="major-desc">藥物資料庫.xlsx 是唯一劑量計算來源；下方依類別記錄使用心得</p>
+    <div class="subcat">
+      <div class="subcat-label">速查資料庫</div>
+      <div class="grid" id="drug-db-grid"></div>
+    </div>
+    <div id="drug-categories"></div>
+  </section>
+
+  <section class="major-section" id="tech-root"></section>
+
+  <section class="major-section">
+    <h2>📝 日常心得</h2>
+    <div class="grid" id="daily-grid"></div>
+  </section>
+
+</main>
+
+<footer>由 Claude 自動維護　｜　新增筆記後請告訴 Claude 更新此頁面</footer>
+
+<script>
+// ---- 手動維護的筆記清單（每次新增/修改筆記時由 Claude 同步更新這裡） ----
+const data = {
+  cases: [
+    // { species:"貓", name:"", problem:"", status:"追蹤中", date:"2026-07-09" }
+  ],
+  drugDatabase: { title:"藥物資料庫.xlsx（劑量計算機）", href:"01_藥物筆記/藥物資料庫.xlsx",
+    desc:"輸入體重自動算出各藥劑量：Carprofen、Meloxicam、Buprenorphine、Amoxicillin-Clavulanate、Cefazolin、Maropitant、Dexmedetomidine、Furosemide",
+    tags:["Carprofen","Meloxicam","Buprenorphine","Amoxicillin","Cefazolin","Maropitant","Dexmedetomidine","Furosemide","xlsx"] },
+  drugCategories: [
+    { name:"腸胃用藥", notes:[] },
+    { name:"抗生素", notes:[] },
+    { name:"耳科用藥", notes:[] },
+    { name:"止痛用藥", notes:[] }
+  ],
+  techSections: [
+    { icon:"🔪", title:"手術筆記", desc:"通用器械/線材、縫合技巧、特定疾病的手術矯正術式", subcats:[
+        { name:"手術器械與線材", notes:[] },
+        { name:"縫合技術", notes:[
+            { title:"Stay suture（牽引縫線）", href:"04_技術與判讀/手術筆記/縫合技術/Stay_suture.md",
+              desc:"胃/瘤胃/眼科手術的牽引縫線用法與注意事項", tags:["手術技術","stay suture","牽引縫線"] }
+        ]},
+        { name:"術式筆記（依疾病）", notes:[] }
+    ]},
+    { icon:"💉", title:"麻醉筆記", desc:"獨立區塊：設備操作＋依麻醉階段分類的用藥時機與監測概念", subcats:[
+        { name:"麻醉機使用", notes:[] },
+        { name:"用藥時機與流程", notes:[
+            { title:"Dexmedetomidine 使用時機", href:"04_技術與判讀/麻醉筆記/Dexmedetomidine_使用時機.md",
+              desc:"適應症、禁忌、與藥物資料庫劑量互相連結", tags:["麻醉筆記","dexmedetomidine","鎮靜"] }
+        ]}
+    ]},
+    { icon:"🩻", title:"影像判讀", desc:"", subcats:[
+        { name:"X光", notes:[] },
+        { name:"超音波", notes:[] }
+    ]},
+    { icon:"🧪", title:"檢驗判讀", desc:"", subcats:[
+        { name:"血液檢驗", notes:[] }
+    ]},
+    { icon:"🦷", title:"牙科", desc:"", subcats:[ { name:"", notes:[] } ] },
+    { icon:"🐾", title:"皮膚科", desc:"", subcats:[ { name:"", notes:[] } ] },
+    { icon:"🚑", title:"急診與重症照護", desc:"", subcats:[ { name:"", notes:[] } ] },
+    { icon:"🫀", title:"內科系統疾病", desc:"依器官系統的疾病生理/診斷邏輯概念", subcats:[
+        { name:"腸胃", notes:[] }, { name:"肝膽", notes:[] },
+        { name:"腎臟泌尿", notes:[] }, { name:"呼吸道", notes:[] }
+    ]}
+  ],
+  daily: [
+    { title:"2026年7月 日常心得", href:"03_日常概念與心得/2026-07.md",
+      desc:"依日期累加的速記本", tags:["速記","2026-07"] }
+  ]
+};
+
+function cardHtml(item){
+  return `<a class="card" href="${item.href}" target="_blank">
+    <div class="title">${item.title}</div>
+    <div class="desc">${item.desc}</div>
+    <div class="tags">${item.tags.map(t=>`<span class="tag">${t}</span>`).join("")}</div>
+  </a>`;
+}
+
+function subcatHtml(name, notes, filter){
+  const filtered = notes.filter(n => !filter || (n.title+n.desc+n.tags.join(",")).toLowerCase().includes(filter));
+  if(filter && filtered.length === 0) return "";
+  const label = name ? `<div class="subcat-label">${name}<span class="n">(${filtered.length})</span></div>` : "";
+  const body = filtered.length
+    ? `<div class="grid">${filtered.map(cardHtml).join("")}</div>`
+    : `<div class="empty-hint">尚無筆記，之後新增後會顯示於此</div>`;
+  return `<div class="subcat">${label}${body}</div>`;
+}
+
+function render(filter=""){
+  const f = filter.trim().toLowerCase();
+
+  // 藥物：資料庫卡片
+  const dbMatch = !f || (data.drugDatabase.title+data.drugDatabase.desc+data.drugDatabase.tags.join(",")).toLowerCase().includes(f);
+  document.getElementById("drug-db-grid").innerHTML = dbMatch ? cardHtml(data.drugDatabase) : `<div class="empty-hint">與搜尋條件不符</div>`;
+
+  // 藥物：依類別
+  const catHtml = data.drugCategories.map(c => subcatHtml(c.name, c.notes, f)).filter(Boolean).join("");
+  document.getElementById("drug-categories").innerHTML = catHtml || (f ? "" : data.drugCategories.map(c => subcatHtml(c.name, c.notes, "")).join(""));
+
+  // 技術與判讀：多個大區塊
+  const techRoot = document.getElementById("tech-root");
+  const sectionsHtml = data.techSections.map(sec => {
+    const subHtml = sec.subcats.map(sc => subcatHtml(sc.name, sc.notes, f)).filter(Boolean).join("");
+    if(f && !subHtml) return "";
+    const finalSub = subHtml || sec.subcats.map(sc => subcatHtml(sc.name, sc.notes, "")).join("");
+    return `<div class="tech-block" style="margin-top:28px;">
+      <h2 style="margin-bottom:2px;">${sec.icon} ${sec.title}</h2>
+      ${sec.desc ? `<p class="major-desc">${sec.desc}</p>` : `<div style="height:8px"></div>`}
+      ${finalSub}
+    </div>`;
+  }).filter(Boolean).join("");
+  techRoot.innerHTML = sectionsHtml || `<div class="empty-hint">沒有符合的技術與判讀筆記</div>`;
+
+  // 日常心得
+  const daily = data.daily.filter(n => !f || (n.title+n.desc+n.tags.join(",")).toLowerCase().includes(f));
+  document.getElementById("daily-grid").innerHTML = daily.length ? daily.map(cardHtml).join("") : `<div class="empty-hint">沒有符合的心得筆記</div>`;
+
+  // Case
+  const caseBody = document.getElementById("case-table");
+  const cases = data.cases.filter(c => !f || (c.species+c.name+c.problem).toLowerCase().includes(f));
+  caseBody.innerHTML = cases.length
+    ? cases.map(c => `<tr><td>${c.species}</td><td>${c.name}</td><td>${c.problem}</td><td><span class="status ${c.status}">${c.status}</span></td><td>${c.date}</td></tr>`).join("")
+    : `<tr class="empty-row"><td colspan="5">尚無 Case，建立後會自動列於此</td></tr>`;
+}
+
+document.getElementById("search").addEventListener("input", e => render(e.target.value));
+render();
+</script>
+
+</body>
+</html>

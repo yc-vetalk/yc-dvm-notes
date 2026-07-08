@@ -123,8 +123,8 @@ const data = {
   cases: [
     // { species:"貓", name:"", problem:"", status:"追蹤中", date:"2026-07-09" }
   ],
-  drugDatabase: { title:"藥物資料庫.xlsx（劑量計算機）", href:"01_藥物筆記/藥物資料庫.xlsx",
-    desc:"輸入體重自動算出各藥劑量：Carprofen、Meloxicam、Buprenorphine、Amoxicillin-Clavulanate、Cefazolin、Maropitant、Dexmedetomidine、Furosemide",
+  drugDatabase: { title:"💊 藥物劑量計算機（網頁版）", href:"drug.html",
+    desc:"直接在網頁輸入體重自動算出各藥劑量，不用下載：Carprofen、Meloxicam、Buprenorphine、Amoxicillin-Clavulanate、Cefazolin、Maropitant、Dexmedetomidine、Furosemide",
     tags:["Carprofen","Meloxicam","Buprenorphine","Amoxicillin","Cefazolin","Maropitant","Dexmedetomidine","Furosemide","xlsx"] },
   drugCategories: [
     { name:"腸胃用藥", notes:[] },
@@ -173,6 +173,7 @@ const data = {
 // 非 .md（如 .xlsx）直接連 raw 檔案下載/開啟
 const RAW_BASE = "https://raw.githubusercontent.com/yc-vetalk/yc-dvm-notes/main/";
 function resolveHref(href){
+  if(!href.includes("/")) return href; // 站內頁面（如 drug.html），原樣連結
   if(href.endsWith(".md")) return "note.html?path=" + encodeURIComponent(href);
   return RAW_BASE + href.split("/").map(encodeURIComponent).join("/");
 }

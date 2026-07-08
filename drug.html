@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>藥物資料庫 — Vet_note</title>
+<style>
+  :root{
+    --bg:#f6f7fb; --card:#ffffff; --ink:#1f2430; --muted:#6b7280;
+    --line:#e5e7eb; --accent:#3b5bdb; --accent-soft:#eef1ff;
+    --tag:#eef2ff; --tag-ink:#3b5bdb;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:"PingFang TC","Microsoft JhengHei",Arial,sans-serif;
+    background:var(--bg); color:var(--ink);
+  }
+  .topbar{
+    position:sticky; top:0; background:var(--bg); border-bottom:1px solid var(--line);
+    padding:14px 16px; display:flex; align-items:center; justify-content:space-between; z-index:10;
+  }
+  .topbar a{ color:var(--accent); text-decoration:none; font-size:14px; font-weight:600; }
+  main{ max-width:900px; margin:0 auto; padding:20px 16px 80px; }
+
+  .weight-bar{
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:16px 18px; display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;
+  }
+  .weight-bar label{ font-size:14px; font-weight:600; }
+  .weight-bar input[type=number]{
+    width:100px; padding:8px 10px; border-radius:8px; border:1px solid var(--line); font-size:15px;
+  }
+  .weight-bar input[type=number]:focus{ outline:2px solid var(--accent); }
+  .weight-bar .unit{ font-size:13px; color:var(--muted); }
+
+  #search{
+    width:100%; padding:11px 14px; border-radius:10px; border:1px solid var(--line);
+    font-size:14px; background:var(--card); margin-bottom:16px;
+  }
+  #search:focus{ outline:2px solid var(--accent); }
+
+  .drug-card{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:14px 16px; margin-bottom:10px;
+  }
+  .drug-card .row1{ display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:6px; }
+  .drug-card .name{ font-weight:600; font-size:15.5px; }
+  .drug-card .cat{ font-size:12px; color:var(--accent); background:var(--accent-soft); padding:2px 9px; border-radius:999px; }
+  .drug-card .dose{ font-size:15px; font-weight:600; color:var(--accent); margin-top:6px; }
+  .drug-card .dose .unit{ font-size:12px; color:var(--muted); font-weight:normal; }
+  .drug-card .meta{ font-size:12.5px; color:var(--muted); margin-top:4px; }
+  .drug-card .caution{ font-size:12.5px; color:var(--ink); margin-top:8px; padding-top:8px; border-top:1px solid var(--line); }
+  .drug-card .caution b{ color:var(--accent); }
+
+  .state{ text-align:center; color:var(--muted); font-size:14px; padding:60px 20px; }
+  .state a{ color:var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="首頁.html">← 返回首頁</a>
+  <a id="raw-link" href="#" target="_blank">在 Excel 開啟原始檔 ↗</a>
+</div>
+
+<main>
+  <div class="weight-bar">
+    <label for="weight">動物體重</label>
+    <input type="number" id="weight" value="4.5" step="0.1" min="0">
+    <span class="unit">kg　－　輸入後下方劑量會即時重新計算</span>
+  </div>
+
+  <input id="search" type="text" placeholder="搜尋藥名、分類，例如：Carprofen、止痛...">
+
+  <div id="list"><div class="state">載入中...</div></div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const RAW_XLSX = "https://raw.githubusercontent.com/yc-vetalk/yc-dvm-notes/main/01_%E8%97%A5%E7%89%A9%E7%AD%86%E8%A8%98/%E8%97%A5%E7%89%A9%E8%B3%87%E6%96%99%E5%BA%AB.xlsx";
+document.getElementById("raw-link").href = RAW_XLSX;
+
+let drugs = [];
+
+function round2(n){ return Math.round(n*100)/100; }
+
+function renderList(weight, filter){
+  const listEl = document.getElementById("list");
+  const f = (filter||"").trim().toLowerCase();
+  const filtered = drugs.filter(d => !f || (d.name+d.cat+d.context+d.route+d.caution).toLowerCase().includes(f));
+  if(filtered.length === 0){
+    listEl.innerHTML = `<div class="state">沒有符合的藥物</div>`;
+    return;
+  }
+  listEl.innerHTML = filtered.map(d => {
+    const doseMin = round2(weight * d.doseMin);
+    const doseMax = round2(weight * d.doseMax);
+    const doseText = d.doseMin === d.doseMax
+      ? `${doseMin} <span class="unit">mg</span>`
+      : `${doseMin} – ${doseMax} <span class="unit">mg</span>`;
+    return `<div class="drug-card">
+      <div class="row1">
+        <span class="name">${d.name}</span>
+        <span class="cat">${d.cat}</span>
+      </div>
+      <div class="dose">${doseText}</div>
+      <div class="meta">${d.context}　｜　${d.route}　｜　${d.freq}　｜　${d.doseMin}${d.doseMin!==d.doseMax ? "–"+d.doseMax : ""} mg/kg</div>
+      ${d.caution ? `<div class="caution"><b>注意：</b>${d.caution}</div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+async function load(){
+  try{
+    const res = await fetch(RAW_XLSX);
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    const buf = await res.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    const headerIdx = rows.findIndex(r => r[0] === "藥名");
+    if(headerIdx === -1) throw new Error("找不到表頭");
+    drugs = rows.slice(headerIdx+1)
+      .filter(r => r[0])
+      .map(r => ({
+        name: r[0], cat: r[1] || "", context: r[2] || "",
+        doseMin: Number(r[3])||0, doseMax: Number(r[4])||0,
+        route: r[5] || "", freq: r[6] || "", caution: r[9] || ""
+      }));
+    const weightInput = document.getElementById("weight");
+    const searchInput = document.getElementById("search");
+    const rerender = () => renderList(Number(weightInput.value)||0, searchInput.value);
+    weightInput.addEventListener("input", rerender);
+    searchInput.addEventListener("input", rerender);
+    rerender();
+  }catch(err){
+    document.getElementById("list").innerHTML = `<div class="state">讀取藥物資料庫失敗。<br><a href="首頁.html">回首頁</a></div>`;
+  }
+}
+load();
+</script>
+
+</body>
+</html>

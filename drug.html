@@ -115,7 +115,7 @@ function renderList(weight, filter){
 
 async function load(){
   try{
-    const res = await fetch(RAW_XLSX);
+    const res = await fetch(RAW_XLSX + "?_=" + Date.now(), { cache: "no-store" });
     if(!res.ok) throw new Error("HTTP " + res.status);
     const buf = await res.arrayBuffer();
     const wb = XLSX.read(buf, { type: "array" });

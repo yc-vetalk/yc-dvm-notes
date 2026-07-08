@@ -131,9 +131,9 @@ async function load(){
     contentEl.innerHTML = `<div class="state">沒有指定筆記路徑。<br><a href="首頁.html">回首頁</a></div>`;
     return;
   }
-  const url = RAW_BASE + path.split("/").map(encodeURIComponent).join("/");
+  const url = RAW_BASE + path.split("/").map(encodeURIComponent).join("/") + "?_=" + Date.now();
   try{
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: "no-store" });
     if(!res.ok) throw new Error("HTTP " + res.status);
     const text = await res.text();
     const { meta, body } = parseFrontmatter(text);

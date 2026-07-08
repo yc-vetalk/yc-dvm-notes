@@ -20,9 +20,13 @@
     margin:0; font-family:"PingFang TC","Microsoft JhengHei",Arial,sans-serif;
     background:var(--bg); color:var(--ink);
   }
-  header{ padding:36px 24px 20px; text-align:center; }
+  header{ padding:30px 24px 16px; text-align:center; position:relative; }
   header h1{ margin:0 0 6px; font-size:26px; }
   header p{ margin:0; color:var(--muted); font-size:14px; }
+  .new-link{
+    position:absolute; top:30px; right:24px; background:var(--accent); color:#fff;
+    text-decoration:none; font-size:13px; font-weight:600; padding:8px 14px; border-radius:999px;
+  }
 
   .search-wrap{ max-width:640px; margin:20px auto 8px; padding:0 16px; }
   #search{
@@ -59,9 +63,7 @@
   .tags{ display:flex; flex-wrap:wrap; gap:5px; }
   .tag{ background:var(--tag); color:var(--tag-ink); font-size:10.5px; padding:2px 7px; border-radius:999px; }
 
-  .empty-hint{
-    color:var(--muted); font-size:12.5px; padding:10px 4px;
-  }
+  .empty-hint{ color:var(--muted); font-size:12.5px; padding:10px 4px; }
 
   table{ width:100%; border-collapse:collapse; background:var(--bg); border-radius:10px; overflow:hidden; border:1px solid var(--line); }
   th,td{ text-align:left; padding:10px 12px; font-size:13px; border-bottom:1px solid var(--line); }
@@ -74,125 +76,97 @@
   .status.待手術{ background:var(--status-surgery); color:var(--status-surgery-ink); }
 
   footer{ text-align:center; color:var(--muted); font-size:12px; padding:24px 0 40px; }
+  .state{ text-align:center; color:var(--muted); font-size:14px; padding:40px 20px; }
 </style>
 </head>
 <body>
 
 <header>
+  <a class="new-link" href="new.html">＋ 新增筆記</a>
   <h1>🩺 Vet_note 知識庫入口</h1>
-  <p>藥物筆記・Case紀錄・日常心得・技術與判讀　｜　最後更新：2026-07-09</p>
+  <p>藥物筆記・Case紀錄・日常心得・技術與判讀　｜　即時讀取 GitHub 內容</p>
 </header>
 
 <div class="search-wrap">
   <input id="search" type="text" placeholder="搜尋關鍵字，例如：Carprofen、食道狹窄、stay suture...">
 </div>
 
-<main>
-
-  <section class="major-section">
-    <h2>📋 Case 進度總覽</h2>
-    <table>
-      <thead><tr><th>物種</th><th>姓名</th><th>主要問題</th><th>狀態</th><th>建立日期</th></tr></thead>
-      <tbody id="case-table">
-        <tr class="empty-row"><td colspan="5">尚無 Case，建立後會自動列於此</td></tr>
-      </tbody>
-    </table>
-  </section>
-
-  <section class="major-section" id="drug-section">
-    <h2>💊 藥物筆記</h2>
-    <p class="major-desc">藥物資料庫.xlsx 是唯一劑量計算來源；下方依類別記錄使用心得</p>
-    <div class="subcat">
-      <div class="subcat-label">速查資料庫</div>
-      <div class="grid" id="drug-db-grid"></div>
-    </div>
-    <div id="drug-categories"></div>
-  </section>
-
-  <section class="major-section" id="tech-root"></section>
-
-  <section class="major-section">
-    <h2>📝 日常心得</h2>
-    <div class="grid" id="daily-grid"></div>
-  </section>
-
+<main id="main-root">
+  <div class="state">載入中...</div>
 </main>
 
-<footer>由 Claude 自動維護　｜　新增筆記後請告訴 Claude 更新此頁面</footer>
+<footer>內容即時讀取自 GitHub repo，新增/編輯筆記後這裡會自動出現，不用手動維護</footer>
 
 <script>
-// ---- 手動維護的筆記清單（每次新增/修改筆記時由 Claude 同步更新這裡） ----
-const data = {
-  cases: [
-    // { species:"貓", name:"", problem:"", status:"追蹤中", date:"2026-07-09" }
-  ],
-  drugDatabase: { title:"💊 藥物劑量計算機（網頁版）", href:"drug.html",
-    desc:"直接在網頁輸入體重自動算出各藥劑量，不用下載：Carprofen、Meloxicam、Buprenorphine、Amoxicillin-Clavulanate、Cefazolin、Maropitant、Dexmedetomidine、Furosemide",
-    tags:["Carprofen","Meloxicam","Buprenorphine","Amoxicillin","Cefazolin","Maropitant","Dexmedetomidine","Furosemide","xlsx"] },
-  drugCategories: [
-    { name:"腸胃用藥", notes:[] },
-    { name:"抗生素", notes:[] },
-    { name:"耳科用藥", notes:[] },
-    { name:"止痛用藥", notes:[] }
-  ],
-  techSections: [
-    { icon:"🔪", title:"手術筆記", desc:"通用器械/線材、縫合技巧、特定疾病的手術矯正術式", subcats:[
-        { name:"手術器械與線材", notes:[] },
-        { name:"縫合技術", notes:[
-            { title:"Stay suture（牽引縫線）", href:"04_技術與判讀/手術筆記/縫合技術/Stay_suture.md",
-              desc:"胃/瘤胃/眼科手術的牽引縫線用法與注意事項", tags:["手術技術","stay suture","牽引縫線"] }
-        ]},
-        { name:"術式筆記（依疾病）", notes:[] }
-    ]},
-    { icon:"💉", title:"麻醉筆記", desc:"獨立區塊：設備操作＋依麻醉階段分類的用藥時機與監測概念", subcats:[
-        { name:"麻醉機使用", notes:[] },
-        { name:"用藥時機與流程", notes:[
-            { title:"Dexmedetomidine 使用時機", href:"04_技術與判讀/麻醉筆記/Dexmedetomidine_使用時機.md",
-              desc:"適應症、禁忌、與藥物資料庫劑量互相連結", tags:["麻醉筆記","dexmedetomidine","鎮靜"] },
-            { title:"上群麻醉常規（Premed/Induction/Maintenance）", href:"04_技術與判讀/麻醉筆記/用藥時機與流程/上群麻醉常規.md",
-              desc:"Fentanyl+Midazolam(±Dex) premed／Alfaxalone induction／Isoflurane maintenance", tags:["上群","fentanyl","midazolam","alfaxalone","isoflurane"] }
-        ]}
-    ]},
-    { icon:"🩻", title:"影像判讀", desc:"", subcats:[
-        { name:"X光", notes:[] },
-        { name:"超音波", notes:[] }
-    ]},
-    { icon:"🧪", title:"檢驗判讀", desc:"", subcats:[
-        { name:"血液檢驗", notes:[] }
-    ]},
-    { icon:"🦷", title:"牙科", desc:"", subcats:[ { name:"", notes:[] } ] },
-    { icon:"🐾", title:"皮膚科", desc:"", subcats:[ { name:"", notes:[] } ] },
-    { icon:"🚑", title:"急診與重症照護", desc:"", subcats:[ { name:"", notes:[] } ] },
-    { icon:"🫀", title:"內科系統疾病", desc:"依器官系統的疾病生理/診斷邏輯概念", subcats:[
-        { name:"腸胃", notes:[] }, { name:"肝膽", notes:[] },
-        { name:"腎臟泌尿", notes:[] }, { name:"呼吸道", notes:[] }
-    ]}
-  ],
-  daily: [
-    { title:"2026年7月 日常心得", href:"03_日常概念與心得/2026-07.md",
-      desc:"依日期累加的速記本", tags:["速記","2026-07"] }
-  ]
+const REPO = "yc-vetalk/yc-dvm-notes";
+const RAW_BASE = `https://raw.githubusercontent.com/${REPO}/main/`;
+const CATEGORY_ICON = {
+  "手術筆記":"🔪", "麻醉筆記":"💉", "影像判讀":"🩻", "檢驗判讀":"🧪",
+  "牙科":"🦷", "皮膚科":"🐾", "急診與重症照護":"🚑", "內科系統疾病":"🫀"
 };
+const TECH_ORDER = ["手術筆記","麻醉筆記","影像判讀","檢驗判讀","牙科","皮膚科","急診與重症照護","內科系統疾病"];
+const DRUG_CAT_ORDER = ["腸胃用藥","抗生素","耳科用藥","止痛用藥"];
 
-// GitHub Pages 對多層中文子資料夾的路徑有時會 404，.md 一律走 note.html 排版檢視器（內部再 fetch raw.githubusercontent.com），
-// 非 .md（如 .xlsx）直接連 raw 檔案下載/開啟
-const RAW_BASE = "https://raw.githubusercontent.com/yc-vetalk/yc-dvm-notes/main/";
-function resolveHref(href){
-  if(!href.includes("/")) return href; // 站內頁面（如 drug.html），原樣連結
-  if(href.endsWith(".md")) return "note.html?path=" + encodeURIComponent(href);
-  return RAW_BASE + href.split("/").map(encodeURIComponent).join("/");
+function resolveHref(path){
+  return "note.html?path=" + encodeURIComponent(path);
+}
+
+function parseFrontmatter(text){
+  const m = text.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
+  if(!m) return { meta:{}, body:text };
+  const meta = {};
+  m[1].split("\n").forEach(line => {
+    const idx = line.indexOf(":");
+    if(idx === -1) return;
+    meta[line.slice(0, idx).trim()] = line.slice(idx+1).trim();
+  });
+  return { meta, body: m[2] };
+}
+
+async function fetchTree(){
+  const res = await fetch(`https://api.github.com/repos/${REPO}/git/trees/main?recursive=1`);
+  if(!res.ok) throw new Error("tree fetch failed: " + res.status);
+  const j = await res.json();
+  return j.tree.filter(t => t.type === "blob" && t.path.endsWith(".md")
+    && !t.path.startsWith("_") && !t.path.startsWith("99_索引"));
+}
+
+async function fetchNoteInfo(path){
+  const filename = path.split("/").pop().replace(/\.md$/, "");
+  try{
+    const res = await fetch(RAW_BASE + path.split("/").map(encodeURIComponent).join("/") + "?_=" + Date.now(), { cache:"no-store" });
+    const text = await res.text();
+    const { meta, body } = parseFrontmatter(text);
+    const h1m = body.match(/^#\s+(.+)$/m);
+    const h1 = h1m ? h1m[1].trim() : "";
+    const tagsRaw = meta["關鍵字"] || "";
+    const tags = tagsRaw.replace(/[\[\]]/g,"").split(",").map(s=>s.trim()).filter(Boolean).slice(0,5);
+    return {
+      path,
+      title: meta["主題"] || meta["藥名"] || filename,
+      meta, tags, h1,
+      desc: [meta["分類"], meta["適用情境"], meta["狀態"]].filter(Boolean).join(" · ")
+    };
+  }catch(e){
+    return { path, title: filename, meta:{}, tags:[], h1:"", desc:"" };
+  }
 }
 
 function cardHtml(item){
-  return `<a class="card" href="${resolveHref(item.href)}" target="_blank">
+  return `<a class="card" href="${resolveHref(item.path)}" target="_blank">
     <div class="title">${item.title}</div>
-    <div class="desc">${item.desc}</div>
+    <div class="desc">${item.desc || item.path}</div>
     <div class="tags">${item.tags.map(t=>`<span class="tag">${t}</span>`).join("")}</div>
   </a>`;
 }
 
+function matchFilter(item, f){
+  if(!f) return true;
+  return (item.title + item.desc + item.tags.join(",") + item.path).toLowerCase().includes(f);
+}
+
 function subcatHtml(name, notes, filter){
-  const filtered = notes.filter(n => !filter || (n.title+n.desc+n.tags.join(",")).toLowerCase().includes(filter));
+  const filtered = notes.filter(n => matchFilter(n, filter));
   if(filter && filtered.length === 0) return "";
   const label = name ? `<div class="subcat-label">${name}<span class="n">(${filtered.length})</span></div>` : "";
   const body = filtered.length
@@ -201,45 +175,101 @@ function subcatHtml(name, notes, filter){
   return `<div class="subcat">${label}${body}</div>`;
 }
 
-function render(filter=""){
-  const f = filter.trim().toLowerCase();
+function orderedKeys(obj, preferredOrder){
+  const keys = Object.keys(obj);
+  const ordered = preferredOrder.filter(k => keys.includes(k));
+  const extra = keys.filter(k => !preferredOrder.includes(k)).sort();
+  return [...ordered, ...extra];
+}
 
-  // 藥物：資料庫卡片
-  const dbMatch = !f || (data.drugDatabase.title+data.drugDatabase.desc+data.drugDatabase.tags.join(",")).toLowerCase().includes(f);
-  document.getElementById("drug-db-grid").innerHTML = dbMatch ? cardHtml(data.drugDatabase) : `<div class="empty-hint">與搜尋條件不符</div>`;
+let ALL = { cases:[], drugDatabase:null, drugCat:{}, techGroups:{}, daily:[] };
 
-  // 藥物：依類別
-  const catHtml = data.drugCategories.map(c => subcatHtml(c.name, c.notes, f)).filter(Boolean).join("");
-  document.getElementById("drug-categories").innerHTML = catHtml || (f ? "" : data.drugCategories.map(c => subcatHtml(c.name, c.notes, "")).join(""));
+function render(filter){
+  const f = (filter||"").trim().toLowerCase();
+  const root = document.getElementById("main-root");
+  let html = "";
 
-  // 技術與判讀：多個大區塊
-  const techRoot = document.getElementById("tech-root");
-  const sectionsHtml = data.techSections.map(sec => {
-    const subHtml = sec.subcats.map(sc => subcatHtml(sc.name, sc.notes, f)).filter(Boolean).join("");
+  // Case 進度總覽
+  const cases = ALL.cases.filter(c => matchFilter(c, f));
+  html += `<section class="major-section"><h2>📋 Case 進度總覽</h2>
+    <table><thead><tr><th>物種</th><th>姓名</th><th>主要問題</th><th>狀態</th><th>建立日期</th></tr></thead>
+    <tbody>${
+      cases.length
+        ? cases.map(c => `<tr onclick="location.href='${resolveHref(c.path)}'" style="cursor:pointer">
+            <td>${c.meta["物種"]||""}</td><td>${c.meta["姓名"]||c.title}</td>
+            <td>${(c.h1.split(" - ")[1]||c.h1)}</td>
+            <td><span class="status ${c.meta["狀態"]||""}">${c.meta["狀態"]||"—"}</span></td>
+            <td>${c.meta["日期建立"]||""}</td></tr>`).join("")
+        : `<tr class="empty-row"><td colspan="5">尚無 Case，建立後會自動列於此</td></tr>`
+    }</tbody></table></section>`;
+
+  // 藥物筆記
+  const dbMatch = !f || matchFilter({title:ALL.drugDatabase.title, desc:ALL.drugDatabase.desc, tags:ALL.drugDatabase.tags, path:""}, f);
+  const drugCatHtml = orderedKeys(ALL.drugCat, DRUG_CAT_ORDER).map(cat => subcatHtml(cat, ALL.drugCat[cat], f)).filter(Boolean).join("")
+    || (f ? "" : orderedKeys(ALL.drugCat, DRUG_CAT_ORDER).map(cat => subcatHtml(cat, ALL.drugCat[cat], "")).join(""));
+  html += `<section class="major-section"><h2>💊 藥物筆記</h2>
+    <p class="major-desc">藥物資料庫.xlsx 是唯一劑量計算來源；下方依類別記錄使用心得</p>
+    <div class="subcat"><div class="subcat-label">速查資料庫</div>
+      <div class="grid">${dbMatch ? `<a class="card" href="${ALL.drugDatabase.href}" target="_blank">
+        <div class="title">${ALL.drugDatabase.title}</div><div class="desc">${ALL.drugDatabase.desc}</div>
+        <div class="tags">${ALL.drugDatabase.tags.map(t=>`<span class="tag">${t}</span>`).join("")}</div></a>` : ""}</div>
+    </div>
+    ${drugCatHtml}</section>`;
+
+  // 技術與判讀（依分類/子分類動態分組）
+  const techKeys = orderedKeys(ALL.techGroups, TECH_ORDER);
+  const techHtml = techKeys.map(cat => {
+    const subGroups = ALL.techGroups[cat];
+    const subHtml = Object.keys(subGroups).sort().map(sub => subcatHtml(sub || "筆記", subGroups[sub], f)).filter(Boolean).join("");
     if(f && !subHtml) return "";
-    const finalSub = subHtml || sec.subcats.map(sc => subcatHtml(sc.name, sc.notes, "")).join("");
-    return `<div class="tech-block" style="margin-top:28px;">
-      <h2 style="margin-bottom:2px;">${sec.icon} ${sec.title}</h2>
-      ${sec.desc ? `<p class="major-desc">${sec.desc}</p>` : `<div style="height:8px"></div>`}
+    const finalSub = subHtml || Object.keys(subGroups).sort().map(sub => subcatHtml(sub || "筆記", subGroups[sub], "")).join("");
+    return `<div style="margin-top:28px;">
+      <h2 style="font-size:17px; margin-bottom:2px;">${CATEGORY_ICON[cat]||"📁"} ${cat}</h2>
       ${finalSub}
     </div>`;
   }).filter(Boolean).join("");
-  techRoot.innerHTML = sectionsHtml || `<div class="empty-hint">沒有符合的技術與判讀筆記</div>`;
+  html += `<section class="major-section">${techHtml || `<div class="empty-hint">沒有符合的技術與判讀筆記</div>`}</section>`;
 
   // 日常心得
-  const daily = data.daily.filter(n => !f || (n.title+n.desc+n.tags.join(",")).toLowerCase().includes(f));
-  document.getElementById("daily-grid").innerHTML = daily.length ? daily.map(cardHtml).join("") : `<div class="empty-hint">沒有符合的心得筆記</div>`;
+  const daily = ALL.daily.filter(n => matchFilter(n, f));
+  html += `<section class="major-section"><h2>📝 日常心得</h2>
+    <div class="grid">${daily.length ? daily.map(cardHtml).join("") : `<div class="empty-hint">沒有符合的心得筆記</div>`}</div></section>`;
 
-  // Case
-  const caseBody = document.getElementById("case-table");
-  const cases = data.cases.filter(c => !f || (c.species+c.name+c.problem).toLowerCase().includes(f));
-  caseBody.innerHTML = cases.length
-    ? cases.map(c => `<tr><td>${c.species}</td><td>${c.name}</td><td>${c.problem}</td><td><span class="status ${c.status}">${c.status}</span></td><td>${c.date}</td></tr>`).join("")
-    : `<tr class="empty-row"><td colspan="5">尚無 Case，建立後會自動列於此</td></tr>`;
+  root.innerHTML = html;
+}
+
+async function loadAll(){
+  try{
+    const files = await fetchTree();
+    const infos = await Promise.all(files.map(f => fetchNoteInfo(f.path)));
+
+    ALL.drugDatabase = { title:"💊 藥物劑量計算機（網頁版）", href:"drug.html",
+      desc:"直接在網頁輸入體重自動算出各藥劑量，不用下載", tags:["劑量計算機"] };
+
+    infos.forEach(i => {
+      if(i.path.startsWith("02_Case紀錄/")) ALL.cases.push(i);
+      else if(i.path.startsWith("01_藥物筆記/依類別用藥筆記/")){
+        const cat = i.path.split("/")[2];
+        (ALL.drugCat[cat] = ALL.drugCat[cat] || []).push(i);
+      } else if(i.path.startsWith("04_技術與判讀/")){
+        const segs = i.path.split("/");
+        const cat = segs[1];
+        const sub = segs.length > 3 ? segs[2] : "";
+        ALL.techGroups[cat] = ALL.techGroups[cat] || {};
+        (ALL.techGroups[cat][sub] = ALL.techGroups[cat][sub] || []).push(i);
+      } else if(i.path.startsWith("03_日常概念與心得/")){
+        ALL.daily.push(i);
+      }
+    });
+
+    render();
+  }catch(e){
+    document.getElementById("main-root").innerHTML = `<div class="state">讀取失敗：${e.message}<br>可能是 GitHub API 額度限制，稍後重新整理再試。</div>`;
+  }
 }
 
 document.getElementById("search").addEventListener("input", e => render(e.target.value));
-render();
+loadAll();
 </script>
 
 </body>

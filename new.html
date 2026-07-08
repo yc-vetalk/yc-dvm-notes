@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>新增筆記 — Vet_note</title>
+<style>
+  :root{
+    --bg:#f6f7fb; --card:#ffffff; --ink:#1f2430; --muted:#6b7280;
+    --line:#e5e7eb; --accent:#3b5bdb; --accent-soft:#eef1ff;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; font-family:"PingFang TC","Microsoft JhengHei",Arial,sans-serif; background:var(--bg); color:var(--ink); }
+  .topbar{ padding:14px 16px; border-bottom:1px solid var(--line); }
+  .topbar a{ color:var(--accent); text-decoration:none; font-size:14px; font-weight:600; }
+  main{ max-width:680px; margin:0 auto; padding:20px 16px 80px; }
+  h1{ font-size:20px; }
+  label{ display:block; font-size:13px; font-weight:600; margin:16px 0 6px; }
+  select, input[type=text]{
+    width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line); font-size:14px; background:var(--card);
+  }
+  textarea{
+    width:100%; min-height:340px; padding:14px; border-radius:10px; border:1px solid var(--line);
+    font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13.5px; line-height:1.6; margin-top:8px; box-sizing:border-box;
+  }
+  .row{ display:flex; gap:10px; }
+  .row > div{ flex:1; }
+  button#create{
+    margin-top:18px; width:100%; padding:12px; border-radius:10px; border:none;
+    background:var(--accent); color:#fff; font-size:15px; font-weight:600; cursor:pointer;
+  }
+  .auth-box{
+    background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:13px; margin-bottom:16px;
+  }
+  .auth-box input{ width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--line); font-size:13px; margin:8px 0; box-sizing:border-box; }
+  .auth-box button{ font-size:13px; padding:6px 12px; border-radius:8px; border:1px solid var(--line); background:var(--bg); cursor:pointer; }
+  .warn{ color:#b8860b; font-size:12px; }
+  .hint{ font-size:12px; color:var(--muted); margin-top:4px; }
+  .msg{ margin-top:14px; font-size:13.5px; padding:10px 12px; border-radius:8px; }
+  .msg.ok{ background:#e6f4ea; color:#1e7e34; }
+  .msg.err{ background:#fdeaea; color:#c0392b; }
+</style>
+</head>
+<body>
+
+<div class="topbar"><a href="首頁.html">← 返回首頁</a></div>
+
+<main>
+  <h1>＋ 新增筆記</h1>
+
+  <div class="auth-box" id="auth-box">
+    <div><b>需要 GitHub token 才能建立筆記</b></div>
+    <div style="margin:6px 0;">到 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank">GitHub 建立 Fine-grained token</a>（Repository 選 yc-dvm-notes，Permissions 開 Contents: Read and write），貼在下面。只存這台裝置。</div>
+    <input type="password" id="pat-input" placeholder="貼上 GitHub token">
+    <button id="pat-save">儲存</button>
+    <span class="warn">⚠️ Public repo，內容任何人都看得到</span>
+  </div>
+
+  <label>筆記類型</label>
+  <select id="type">
+    <option value="case">Case 紀錄（特定病患）</option>
+    <option value="drug">藥物筆記（依類別用藥心得）</option>
+    <option value="tech">技術與判讀（通用知識/技術概念）</option>
+    <option value="daily">日常速記（附加到本月速記本）</option>
+    <option value="custom">自訂路徑</option>
+  </select>
+
+  <div id="fields"></div>
+
+  <label>內容（Markdown，含最上面的 --- 資料區塊）</label>
+  <textarea id="content" spellcheck="false"></textarea>
+
+  <button id="create">建立筆記</button>
+  <div id="msg"></div>
+</main>
+
+<script>
+const REPO = "yc-vetalk/yc-dvm-notes";
+const RAW_BASE = `https://raw.githubusercontent.com/${REPO}/main/`;
+
+function getToken(){ return localStorage.getItem("gh_pat") || ""; }
+document.getElementById("pat-input").value = getToken();
+document.getElementById("pat-save").addEventListener("click", () => {
+  const v = document.getElementById("pat-input").value.trim();
+  if(v) localStorage.setItem("gh_pat", v);
+});
+
+function utf8ToBase64(str){
+  const bytes = new TextEncoder().encode(str);
+  let binary = "";
+  bytes.forEach(b => binary += String.fromCharCode(b));
+  return btoa(binary);
+}
+
+function todayStr(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
+const FIELD_HTML = {
+  case: `<label>物種</label><select id="f-species"><option>貓</option><option>犬</option><option>其他</option></select>
+         <label>檔名（去識別化代號，例如 Case001）</label><input type="text" id="f-name" placeholder="Case001">`,
+  drug: `<label>用藥類別</label><select id="f-cat"><option>腸胃用藥</option><option>抗生素</option><option>耳科用藥</option><option>止痛用藥</option><option value="__custom">其他（自訂）</option></select>
+         <input type="text" id="f-cat-custom" placeholder="輸入自訂類別名稱" style="display:none; margin-top:8px;">
+         <label>檔名</label><input type="text" id="f-name" placeholder="藥名">`,
+  tech: `<label>分類</label><select id="f-cat"><option>手術筆記</option><option>麻醉筆記</option><option>影像判讀</option><option>檢驗判讀</option><option>牙科</option><option>皮膚科</option><option>急診與重症照護</option><option>內科系統疾病</option><option value="__custom">其他（自訂）</option></select>
+         <input type="text" id="f-cat-custom" placeholder="輸入自訂分類名稱" style="display:none; margin-top:8px;">
+         <label>子分類（選填，例如「縫合技術」）</label><input type="text" id="f-sub" placeholder="不填就直接放在分類底下">
+         <label>檔名</label><input type="text" id="f-name" placeholder="主題名稱">`,
+  daily: `<div class="hint">會附加到 03_日常概念與心得/${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}.md 的最下面，不用填檔名。</div>`,
+  custom: `<label>完整路徑（含副檔名 .md）</label><input type="text" id="f-path" placeholder="例如 04_技術與判讀/皮膚科/耳道感染.md">`
+};
+
+const TEMPLATES = {
+  case: () => `---
+病歷編號:
+姓名:
+物種: {{species}}
+品種:
+性別:
+年齡:
+體重(kg):
+BCS:
+系統:
+關鍵字: []
+日期建立: ${todayStr()}
+狀態: 追蹤中
+---
+
+# {{species}}{{name}} -
+
+## 基本資料
+- 病歷編號／姓名：
+- 品種／性別／年齡：
+- 體重：　BCS：
+
+## 主訴與病史
+
+## 理學檢查
+
+## 血檢資料
+| 日期 | 項目 | 數值 | 參考範圍 | 備註 |
+|---|---|---|---|---|
+
+## 影像紀錄
+
+## 病因與鑑別診斷
+
+## 診斷
+
+## 治療與用藥
+| 藥物 | 劑量 | 途徑 | 頻率 | 備註 |
+|---|---|---|---|---|
+
+## 手術計畫（如適用）
+
+## 術後照護與預後
+
+## 這次 Case 的心得與追蹤紀錄
+`,
+  drug: () => `---
+藥名:
+分類: {{cat}}
+適用情境: []
+關鍵字: []
+日期建立: ${todayStr()}
+---
+
+#
+
+## 基本資料
+- 分類：
+- 給藥途徑：
+- 標準劑量（教科書）：
+- 院內慣用劑量：
+
+## 適應症
+
+## 禁忌與副作用
+
+## 使用心得與遇到的 Case
+
+## 相關 Case 連結
+`,
+  tech: () => `---
+主題:
+分類: {{cat}}
+關鍵字: []
+日期建立: ${todayStr()}
+---
+
+#
+
+## 原理／基本概念
+
+## 操作步驟／判讀流程
+
+## 常見誤判陷阱與注意事項
+
+## 實例
+
+## 參考資料來源
+`,
+  daily: () => `\n## ${todayStr()}\n\n`,
+};
+
+function renderFields(){
+  const type = document.getElementById("type").value;
+  document.getElementById("fields").innerHTML = FIELD_HTML[type] || "";
+  const catSel = document.getElementById("f-cat");
+  if(catSel){
+    catSel.addEventListener("change", () => {
+      document.getElementById("f-cat-custom").style.display = catSel.value === "__custom" ? "block" : "none";
+    });
+  }
+  const speciesSel = document.getElementById("f-species");
+  let tpl = TEMPLATES[type] ? TEMPLATES[type]() : "";
+  if(type === "case") tpl = tpl.replace(/{{species}}/g, speciesSel ? speciesSel.value : "");
+  if(type === "drug" || type === "tech") tpl = tpl.replace("{{cat}}", catSel ? catSel.value : "");
+  document.getElementById("content").value = tpl;
+}
+document.getElementById("type").addEventListener("change", renderFields);
+renderFields();
+
+async function githubGet(path, token){
+  const apiPath = path.split("/").map(encodeURIComponent).join("/");
+  const headers = { Accept: "application/vnd.github+json" };
+  if(token) headers.Authorization = "token " + token;
+  const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${apiPath}`, { headers });
+  if(res.status === 404) return null;
+  if(!res.ok) throw new Error("HTTP " + res.status);
+  return res.json();
+}
+
+function showMsg(cls, text){
+  const el = document.getElementById("msg");
+  el.className = "msg " + cls;
+  el.innerHTML = text;
+}
+
+document.getElementById("create").addEventListener("click", async () => {
+  const token = getToken();
+  if(!token){ showMsg("err", "請先貼上有寫入權限的 GitHub token"); return; }
+  const type = document.getElementById("type").value;
+  const content = document.getElementById("content").value;
+
+  let path = "";
+  if(type === "case"){
+    const species = document.getElementById("f-species").value;
+    const name = document.getElementById("f-name").value.trim();
+    if(!name){ showMsg("err", "請填檔名"); return; }
+    path = `02_Case紀錄/${species}/${name}.md`;
+  } else if(type === "drug"){
+    const catSel = document.getElementById("f-cat").value;
+    const cat = catSel === "__custom" ? document.getElementById("f-cat-custom").value.trim() : catSel;
+    const name = document.getElementById("f-name").value.trim();
+    if(!cat || !name){ showMsg("err", "請填類別與檔名"); return; }
+    path = `01_藥物筆記/依類別用藥筆記/${cat}/${name}.md`;
+  } else if(type === "tech"){
+    const catSel = document.getElementById("f-cat").value;
+    const cat = catSel === "__custom" ? document.getElementById("f-cat-custom").value.trim() : catSel;
+    const sub = document.getElementById("f-sub").value.trim();
+    const name = document.getElementById("f-name").value.trim();
+    if(!cat || !name){ showMsg("err", "請填分類與檔名"); return; }
+    path = sub ? `04_技術與判讀/${cat}/${sub}/${name}.md` : `04_技術與判讀/${cat}/${name}.md`;
+  } else if(type === "daily"){
+    const d = new Date();
+    path = `03_日常概念與心得/${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}.md`;
+  } else {
+    path = document.getElementById("f-path").value.trim();
+    if(!path){ showMsg("err", "請填路徑"); return; }
+  }
+
+  showMsg("", "建立中...");
+  try{
+    const existing = await githubGet(path, token);
+    let finalContent = content;
+    let sha = null;
+    if(existing){
+      if(type === "daily"){
+        const decoded = decodeURIComponent(escape(atob(existing.content.replace(/\n/g, ""))));
+        finalContent = decoded + content;
+        sha = existing.sha;
+      } else {
+        showMsg("err", `已經有同名檔案：<code>${path}</code>，換個檔名或到首頁找該篇編輯`);
+        return;
+      }
+    }
+    const apiPath = path.split("/").map(encodeURIComponent).join("/");
+    const body = { message: "新增筆記（網頁）：" + path, content: utf8ToBase64(finalContent), branch: "main" };
+    if(sha) body.sha = sha;
+    const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${apiPath}`, {
+      method: "PUT",
+      headers: { Authorization: "token " + token, Accept: "application/vnd.github+json", "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    showMsg("ok", `建立成功！<a href="note.html?path=${encodeURIComponent(path)}">點此查看</a>　或　<a href="首頁.html">回首頁</a>`);
+  }catch(e){
+    showMsg("err", "建立失敗：" + e.message + "（確認 token 有 Contents 寫入權限）");
+  }
+});
+</script>
+
+</body>
+</html>

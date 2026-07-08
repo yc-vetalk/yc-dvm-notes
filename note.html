@@ -94,6 +94,17 @@
     font-size:13px; margin:8px 0; box-sizing:border-box;
   }
   .auth-box .warn{ color:#b8860b; font-size:12px; }
+
+  #edit-panel{ display:none; }
+  #edit-area{
+    width:100%; min-height:400px; padding:16px; border-radius:14px; border:1px solid var(--line);
+    font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13.5px; line-height:1.6; box-sizing:border-box;
+  }
+  .edit-actions{ display:flex; gap:8px; margin-top:10px; }
+  .edit-actions button{
+    font-size:13px; padding:8px 16px; border-radius:8px; border:1px solid var(--line); cursor:pointer; background:var(--card);
+  }
+  .edit-actions button.primary{ background:var(--accent); color:#fff; border-color:var(--accent); }
 </style>
 </head>
 <body>
@@ -103,13 +114,14 @@
   <span style="font-size:12px; color:var(--muted);">選字可醒目標記</span>
   <div class="sync-bar">
     <span id="sync-status" class="sync-status"></span>
+    <button id="edit-toggle">✏️ 編輯</button>
     <button id="auth-toggle">🔑 同步設定</button>
   </div>
 </div>
 
 <main>
   <div class="auth-box" id="auth-box">
-    <div><b>讓筆記/標記同步到所有裝置</b></div>
+    <div><b>讓筆記/標記同步到所有裝置，並可直接在網頁編輯</b></div>
     <div style="margin:8px 0;">1. 到 GitHub 建立一個 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank">Fine-grained token</a>：Repository access 選 <code>yc-dvm-notes</code>，Permissions 開 <code>Contents: Read and write</code>。<br>2. 貼在下面，只會存在這台裝置，不會傳給任何人（除了你自己的 GitHub）。</div>
     <input type="password" id="pat-input" placeholder="貼上 GitHub token（github_pat_... 或 ghp_...）">
     <button id="pat-save">儲存並連線</button>
@@ -123,6 +135,14 @@
   </div>
   <div id="meta"></div>
   <div id="content"><div class="state">載入中...</div></div>
+
+  <div id="edit-panel">
+    <textarea id="edit-area" spellcheck="false"></textarea>
+    <div class="edit-actions">
+      <button class="primary" id="edit-save">💾 儲存到 GitHub</button>
+      <button id="edit-cancel">取消</button>
+    </div>
+  </div>
 </main>
 
 <button id="hl-btn">醒目標記</button>
@@ -370,6 +390,87 @@ function setupMyNote(path){
   });
 }
 
+// ---- 直接編輯（寫回筆記本身，不是 _personal 那份） ----
+let rawNoteText = "";
+let noteSha = null;
+
+function renderNoteBody(path){
+  const contentEl = document.getElementById("content");
+  const { meta, body } = parseFrontmatter(rawNoteText);
+  const filename = decodeURIComponent(path.split("/").pop()).replace(/\.md$/, "");
+  document.title = filename + " — Vet_note";
+  renderMeta(meta, meta["主題"] || meta["藥名"] || filename);
+  contentEl.innerHTML = marked.parse(body);
+  fixRelativeLinks(contentEl, path);
+  setupHighlighting(contentEl, path);
+  reapplyHighlights();
+}
+
+async function fetchNoteSha(path){
+  const token = getToken();
+  const headers = { Accept: "application/vnd.github+json" };
+  if(token) headers.Authorization = "token " + token;
+  const apiPath = path.split("/").map(encodeURIComponent).join("/");
+  const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${apiPath}`, { headers });
+  if(!res.ok) throw new Error("HTTP " + res.status);
+  const j = await res.json();
+  return j.sha;
+}
+
+function setupEditing(path){
+  const toggle = document.getElementById("edit-toggle");
+  const panel = document.getElementById("edit-panel");
+  const contentEl = document.getElementById("content");
+  const area = document.getElementById("edit-area");
+
+  toggle.addEventListener("click", async () => {
+    if(!getToken()){
+      alert("請先按「🔑 同步設定」貼上有 Contents 寫入權限的 GitHub token 才能編輯");
+      document.getElementById("auth-box").classList.add("show");
+      return;
+    }
+    area.value = rawNoteText;
+    panel.style.display = "block";
+    contentEl.style.display = "none";
+    document.getElementById("meta").style.display = "none";
+    try{ noteSha = await fetchNoteSha(path); }catch(e){ /* 存的時候再重試 */ }
+  });
+
+  document.getElementById("edit-cancel").addEventListener("click", () => {
+    panel.style.display = "none";
+    contentEl.style.display = "block";
+    document.getElementById("meta").style.display = "block";
+  });
+
+  document.getElementById("edit-save").addEventListener("click", async () => {
+    const token = getToken();
+    const newText = area.value;
+    setSyncStatus("", "儲存中...");
+    try{
+      if(!noteSha) noteSha = await fetchNoteSha(path);
+      const apiPath = path.split("/").map(encodeURIComponent).join("/");
+      const body = { message: "編輯筆記（網頁）：" + path, content: utf8ToBase64(newText), branch: "main", sha: noteSha };
+      const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${apiPath}`, {
+        method: "PUT",
+        headers: { Authorization: "token " + token, Accept: "application/vnd.github+json", "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if(!res.ok) throw new Error("HTTP " + res.status);
+      const j = await res.json();
+      noteSha = j.content.sha;
+      rawNoteText = newText;
+      renderNoteBody(path);
+      panel.style.display = "none";
+      contentEl.style.display = "block";
+      document.getElementById("meta").style.display = "block";
+      setSyncStatus("ok", "已儲存 ✓");
+    }catch(e){
+      setSyncStatus("err", "儲存失敗（token 權限或網路問題）");
+      alert("儲存失敗，請確認 token 有這個 repo 的 Contents 寫入權限");
+    }
+  });
+}
+
 async function load(){
   const params = new URLSearchParams(location.search);
   const path = params.get("path");
@@ -380,21 +481,15 @@ async function load(){
   }
   setupAuthBox(path);
   setupMyNote(path);
+  setupEditing(path);
   await loadPersonalData(path);
   renderMyNoteFromData();
   const url = RAW_BASE + path.split("/").map(encodeURIComponent).join("/") + "?_=" + Date.now();
   try{
     const res = await fetch(url, { cache: "no-store" });
     if(!res.ok) throw new Error("HTTP " + res.status);
-    const text = await res.text();
-    const { meta, body } = parseFrontmatter(text);
-    const filename = decodeURIComponent(path.split("/").pop()).replace(/\.md$/, "");
-    document.title = filename + " — Vet_note";
-    renderMeta(meta, meta["主題"] || meta["藥名"] || filename);
-    contentEl.innerHTML = marked.parse(body);
-    fixRelativeLinks(contentEl, path);
-    setupHighlighting(contentEl, path);
-    reapplyHighlights();
+    rawNoteText = await res.text();
+    renderNoteBody(path);
   }catch(err){
     contentEl.innerHTML = `<div class="state">找不到這篇筆記，或讀取失敗。<br><a href="首頁.html">回首頁</a></div>`;
   }

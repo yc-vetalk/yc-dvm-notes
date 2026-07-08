@@ -169,9 +169,11 @@ const data = {
   ]
 };
 
-// GitHub Pages 對多層中文子資料夾的路徑有時會 404，改連到 raw.githubusercontent.com（已驗證各層深度都能穩定讀取）
+// GitHub Pages 對多層中文子資料夾的路徑有時會 404，.md 一律走 note.html 排版檢視器（內部再 fetch raw.githubusercontent.com），
+// 非 .md（如 .xlsx）直接連 raw 檔案下載/開啟
 const RAW_BASE = "https://raw.githubusercontent.com/yc-vetalk/yc-dvm-notes/main/";
 function resolveHref(href){
+  if(href.endsWith(".md")) return "note.html?path=" + encodeURIComponent(href);
   return RAW_BASE + href.split("/").map(encodeURIComponent).join("/");
 }
 

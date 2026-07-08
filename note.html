@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>筆記檢視 — Vet_note</title>
+<style>
+  :root{
+    --bg:#f6f7fb; --card:#ffffff; --ink:#1f2430; --muted:#6b7280;
+    --line:#e5e7eb; --accent:#3b5bdb; --accent-soft:#eef1ff;
+    --tag:#eef2ff; --tag-ink:#3b5bdb;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:"PingFang TC","Microsoft JhengHei",Arial,sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.7;
+  }
+  .topbar{
+    position:sticky; top:0; background:var(--bg); border-bottom:1px solid var(--line);
+    padding:14px 16px; display:flex; align-items:center; gap:10px; z-index:10;
+  }
+  .topbar a{
+    color:var(--accent); text-decoration:none; font-size:14px; font-weight:600;
+  }
+  main{ max-width:760px; margin:0 auto; padding:24px 20px 80px; }
+
+  #meta{ margin-bottom:20px; }
+  #meta .tags{ display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  #meta .tag{ background:var(--tag); color:var(--tag-ink); font-size:12px; padding:3px 10px; border-radius:999px; }
+  #meta .field{ font-size:13px; color:var(--muted); margin:2px 0; }
+
+  #content{
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:28px 30px;
+  }
+  #content h1{ font-size:22px; margin:0 0 16px; }
+  #content h2{ font-size:17px; margin:28px 0 10px; padding-top:10px; border-top:1px solid var(--line); }
+  #content h2:first-child{ border-top:none; padding-top:0; }
+  #content h3{ font-size:15px; margin:18px 0 8px; color:var(--accent); }
+  #content p{ margin:0 0 12px; font-size:15px; }
+  #content ul, #content ol{ margin:0 0 12px; padding-left:1.4em; font-size:15px; }
+  #content li{ margin:4px 0; }
+  #content table{ width:100%; border-collapse:collapse; margin:12px 0; font-size:13.5px; }
+  #content th, #content td{ border:1px solid var(--line); padding:8px 10px; text-align:left; }
+  #content th{ background:var(--accent-soft); color:var(--accent); }
+  #content code{ background:var(--accent-soft); color:var(--accent); padding:1px 6px; border-radius:4px; font-size:13px; }
+  #content blockquote{
+    margin:0 0 12px; padding:8px 14px; border-left:3px solid var(--accent);
+    background:var(--accent-soft); color:var(--text-secondary); font-size:14px; border-radius:0 8px 8px 0;
+  }
+  #content a{ color:var(--accent); }
+  #content strong{ color:var(--ink); }
+  #content hr{ border:none; border-top:1px solid var(--line); margin:20px 0; }
+
+  .state{ text-align:center; color:var(--muted); font-size:14px; padding:60px 20px; }
+  .state a{ color:var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="首頁.html">← 返回首頁</a>
+</div>
+
+<main>
+  <div id="meta"></div>
+  <div id="content"><div class="state">載入中...</div></div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
+<script>
+const RAW_BASE = "https://raw.githubusercontent.com/yc-vetalk/yc-dvm-notes/main/";
+
+function parseFrontmatter(text){
+  const m = text.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
+  if(!m) return { meta:{}, body:text };
+  const meta = {};
+  m[1].split("\n").forEach(line => {
+    const idx = line.indexOf(":");
+    if(idx === -1) return;
+    const key = line.slice(0, idx).trim();
+    let val = line.slice(idx+1).trim();
+    meta[key] = val;
+  });
+  return { meta, body: m[2] };
+}
+
+function renderMeta(meta, title){
+  const metaEl = document.getElementById("meta");
+  let html = `<h1 style="font-size:20px; margin:0 0 6px;">${title}</h1>`;
+  const fieldNames = { "物種":"物種", "分類":"分類", "適用情境":"適用情境", "系統":"系統", "日期建立":"建立日期", "狀態":"狀態" };
+  Object.keys(fieldNames).forEach(k => {
+    if(meta[k]) html += `<div class="field">${fieldNames[k]}：${meta[k].replace(/[\[\]]/g,"")}</div>`;
+  });
+  let tags = [];
+  if(meta["關鍵字"]) tags = meta["關鍵字"].replace(/[\[\]]/g,"").split(",").map(s=>s.trim()).filter(Boolean);
+  if(tags.length) html += `<div class="tags">${tags.map(t=>`<span class="tag">${t}</span>`).join("")}</div>`;
+  metaEl.innerHTML = html;
+}
+
+async function load(){
+  const params = new URLSearchParams(location.search);
+  const path = params.get("path");
+  const contentEl = document.getElementById("content");
+  if(!path){
+    contentEl.innerHTML = `<div class="state">沒有指定筆記路徑。<br><a href="首頁.html">回首頁</a></div>`;
+    return;
+  }
+  const url = RAW_BASE + path.split("/").map(encodeURIComponent).join("/");
+  try{
+    const res = await fetch(url);
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+    const { meta, body } = parseFrontmatter(text);
+    const filename = decodeURIComponent(path.split("/").pop()).replace(/\.md$/, "");
+    document.title = filename + " — Vet_note";
+    renderMeta(meta, meta["主題"] || meta["藥名"] || filename);
+    contentEl.innerHTML = marked.parse(body);
+  }catch(err){
+    contentEl.innerHTML = `<div class="state">找不到這篇筆記，或讀取失敗。<br><a href="首頁.html">回首頁</a></div>`;
+  }
+}
+load();
+</script>
+
+</body>
+</html>

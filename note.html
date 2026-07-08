@@ -75,18 +75,50 @@
     font-family:inherit; font-size:14px; color:var(--ink); outline:none; padding:0;
   }
   .mynote-box .clear-link{ color:var(--muted); text-decoration:underline; cursor:pointer; font-size:11px; }
+
+  .sync-bar{ font-size:12px; color:var(--muted); display:flex; align-items:center; gap:8px; margin-left:auto; }
+  .sync-bar button{
+    font-size:12px; border:1px solid var(--line); background:var(--card); border-radius:8px;
+    padding:4px 10px; cursor:pointer; color:var(--accent);
+  }
+  .sync-status.ok{ color:#1e7e34; }
+  .sync-status.err{ color:#c0392b; }
+
+  .auth-box{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:14px 16px; margin-bottom:16px; font-size:13px; display:none;
+  }
+  .auth-box.show{ display:block; }
+  .auth-box input{
+    width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--line);
+    font-size:13px; margin:8px 0; box-sizing:border-box;
+  }
+  .auth-box .warn{ color:#b8860b; font-size:12px; }
 </style>
 </head>
 <body>
 
 <div class="topbar">
   <a href="首頁.html">← 返回首頁</a>
-  <span style="font-size:12px; color:var(--muted);">選字可醒目標記／下方可寫個人筆記（只存在這台裝置）</span>
+  <span style="font-size:12px; color:var(--muted);">選字可醒目標記</span>
+  <div class="sync-bar">
+    <span id="sync-status" class="sync-status"></span>
+    <button id="auth-toggle">🔑 同步設定</button>
+  </div>
 </div>
 
 <main>
+  <div class="auth-box" id="auth-box">
+    <div><b>讓筆記/標記同步到所有裝置</b></div>
+    <div style="margin:8px 0;">1. 到 GitHub 建立一個 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank">Fine-grained token</a>：Repository access 選 <code>yc-dvm-notes</code>，Permissions 開 <code>Contents: Read and write</code>。<br>2. 貼在下面，只會存在這台裝置，不會傳給任何人（除了你自己的 GitHub）。</div>
+    <input type="password" id="pat-input" placeholder="貼上 GitHub token（github_pat_... 或 ghp_...）">
+    <button id="pat-save">儲存並連線</button>
+    <button id="pat-clear">登出</button>
+    <div class="warn">⚠️ 這個 repo 是 Public，同步後的筆記/標記任何人拿到連結都看得到，請勿寫入敏感資訊。</div>
+  </div>
+
   <div class="mynote-box">
-    <div class="label"><span>🗒️ 我的筆記（僅存在這台裝置，不會同步／不會分享）</span><span class="clear-link" id="clear-mynote">清空</span></div>
+    <div class="label"><span>🗒️ 我的筆記</span><span class="clear-link" id="clear-mynote">清空</span></div>
     <textarea id="mynote" placeholder="在這裡寫下你自己的想法、提醒、還沒問完的問題..."></textarea>
   </div>
   <div id="meta"></div>
@@ -151,16 +183,111 @@ function fixRelativeLinks(container, currentPath){
   });
 }
 
-// ---- 個人標記／個人筆記：只存在這台裝置的 localStorage，不會 push 回 GitHub ----
-function hlKey(path){ return "vetnote_hl_" + path; }
-function noteKey(path){ return "vetnote_mynote_" + path; }
+// ---- 個人標記／個人筆記：先寫 localStorage 當即時快取，若已連線 GitHub 則同步到 _personal/ 資料夾（public repo！） ----
+const REPO = "yc-vetalk/yc-dvm-notes";
+const localKey = path => "vetnote_personal_" + path;
 
-function getHighlights(path){
-  try{ return JSON.parse(localStorage.getItem(hlKey(path)) || "[]"); }catch(e){ return []; }
+function getToken(){ return localStorage.getItem("gh_pat") || ""; }
+function setSyncStatus(state, text){
+  const el = document.getElementById("sync-status");
+  el.className = "sync-status " + (state || "");
+  el.textContent = text || "";
 }
-function saveHighlight(path, text){
-  const list = getHighlights(path);
-  if(!list.includes(text)){ list.push(text); localStorage.setItem(hlKey(path), JSON.stringify(list)); }
+
+function personalApiPath(path){
+  return "_personal/" + path.replace(/\.md$/, ".json");
+}
+
+async function fetchRemotePersonal(path){
+  const token = getToken();
+  if(!token) return null;
+  const apiPath = personalApiPath(path).split("/").map(encodeURIComponent).join("/");
+  try{
+    const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${apiPath}`, {
+      headers: { Authorization: "token " + token, Accept: "application/vnd.github+json" }
+    });
+    if(res.status === 404) return { data: null, sha: null };
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    const j = await res.json();
+    const decoded = decodeURIComponent(escape(atob(j.content.replace(/\n/g, ""))));
+    return { data: JSON.parse(decoded), sha: j.sha };
+  }catch(e){
+    setSyncStatus("err", "讀取同步資料失敗");
+    return null;
+  }
+}
+
+function utf8ToBase64(str){
+  const bytes = new TextEncoder().encode(str);
+  let binary = "";
+  bytes.forEach(b => binary += String.fromCharCode(b));
+  return btoa(binary);
+}
+
+let currentSha = null;
+async function saveRemotePersonal(path, dataObj){
+  const token = getToken();
+  if(!token) return;
+  setSyncStatus("", "同步中...");
+  const apiPath = personalApiPath(path).split("/").map(encodeURIComponent).join("/");
+  const body = {
+    message: "sync personal notes: " + path,
+    content: utf8ToBase64(JSON.stringify(dataObj, null, 2)),
+    branch: "main"
+  };
+  if(currentSha) body.sha = currentSha;
+  try{
+    const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${apiPath}`, {
+      method: "PUT",
+      headers: { Authorization: "token " + token, Accept: "application/vnd.github+json", "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    const j = await res.json();
+    currentSha = j.content.sha;
+    setSyncStatus("ok", "已同步 ✓");
+  }catch(e){
+    setSyncStatus("err", "同步失敗（token 是否有 Contents 寫入權限？）");
+  }
+}
+
+let personalData = { myNote: "", highlights: [] };
+let saveTimer = null;
+function schedulePersonalSave(path){
+  localStorage.setItem(localKey(path), JSON.stringify(personalData));
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => saveRemotePersonal(path, personalData), 1200);
+}
+
+async function loadPersonalData(path){
+  const local = localStorage.getItem(localKey(path));
+  if(local){ try{ personalData = JSON.parse(local); }catch(e){} }
+  if(getToken()){
+    setSyncStatus("", "讀取同步資料中...");
+    const remote = await fetchRemotePersonal(path);
+    if(remote){
+      currentSha = remote.sha;
+      if(remote.data){ personalData = remote.data; localStorage.setItem(localKey(path), JSON.stringify(personalData)); }
+      setSyncStatus("ok", "已連線同步");
+    }
+  } else {
+    setSyncStatus("", "未連線同步（僅存本機）");
+  }
+}
+
+function setupAuthBox(path){
+  const box = document.getElementById("auth-box");
+  const toggle = document.getElementById("auth-toggle");
+  toggle.addEventListener("click", () => box.classList.toggle("show"));
+  document.getElementById("pat-input").value = getToken();
+  document.getElementById("pat-save").addEventListener("click", async () => {
+    const val = document.getElementById("pat-input").value.trim();
+    if(val){ localStorage.setItem("gh_pat", val); await loadPersonalData(path); renderMyNoteFromData(); reapplyHighlights(); }
+  });
+  document.getElementById("pat-clear").addEventListener("click", () => {
+    localStorage.removeItem("gh_pat");
+    setSyncStatus("", "未連線同步（僅存本機）");
+  });
 }
 
 // 在 container 內找出所有等於 text 的文字節點片段，包成 <mark>
@@ -186,11 +313,20 @@ function wrapTextInContainer(container, text){
   });
 }
 
-function applyStoredHighlights(container, path){
-  getHighlights(path).forEach(text => wrapTextInContainer(container, text));
+let contentElRef = null;
+function reapplyHighlights(){
+  if(!contentElRef) return;
+  contentElRef.querySelectorAll("mark.user-hl").forEach(m => m.replaceWith(document.createTextNode(m.textContent)));
+  contentElRef.normalize();
+  (personalData.highlights || []).forEach(text => wrapTextInContainer(contentElRef, text));
+}
+
+function renderMyNoteFromData(){
+  document.getElementById("mynote").value = personalData.myNote || "";
 }
 
 function setupHighlighting(container, path){
+  contentElRef = container;
   const btn = document.getElementById("hl-btn");
   let pendingText = "";
   function hideBtn(){ btn.style.display = "none"; }
@@ -208,9 +344,11 @@ function setupHighlighting(container, path){
   document.addEventListener("touchend", e => { if(e.target !== btn) setTimeout(showBtnForSelection, 0); });
   btn.addEventListener("click", () => {
     if(pendingText){
-      saveHighlight(path, pendingText);
+      if(!personalData.highlights) personalData.highlights = [];
+      if(!personalData.highlights.includes(pendingText)) personalData.highlights.push(pendingText);
       wrapTextInContainer(container, pendingText);
       window.getSelection().removeAllRanges();
+      schedulePersonalSave(path);
     }
     hideBtn();
   });
@@ -218,10 +356,17 @@ function setupHighlighting(container, path){
 
 function setupMyNote(path){
   const ta = document.getElementById("mynote");
-  ta.value = localStorage.getItem(noteKey(path)) || "";
-  ta.addEventListener("input", () => localStorage.setItem(noteKey(path), ta.value));
+  ta.addEventListener("input", () => {
+    personalData.myNote = ta.value;
+    schedulePersonalSave(path);
+  });
   document.getElementById("clear-mynote").addEventListener("click", () => {
-    if(confirm("清空這篇筆記的個人筆記？")){ ta.value = ""; localStorage.removeItem(noteKey(path)); }
+    if(confirm("清空這篇筆記的個人筆記與標記？")){
+      ta.value = "";
+      personalData = { myNote: "", highlights: [] };
+      schedulePersonalSave(path);
+      reapplyHighlights();
+    }
   });
 }
 
@@ -233,7 +378,10 @@ async function load(){
     contentEl.innerHTML = `<div class="state">沒有指定筆記路徑。<br><a href="首頁.html">回首頁</a></div>`;
     return;
   }
+  setupAuthBox(path);
   setupMyNote(path);
+  await loadPersonalData(path);
+  renderMyNoteFromData();
   const url = RAW_BASE + path.split("/").map(encodeURIComponent).join("/") + "?_=" + Date.now();
   try{
     const res = await fetch(url, { cache: "no-store" });
@@ -245,8 +393,8 @@ async function load(){
     renderMeta(meta, meta["主題"] || meta["藥名"] || filename);
     contentEl.innerHTML = marked.parse(body);
     fixRelativeLinks(contentEl, path);
-    applyStoredHighlights(contentEl, path);
     setupHighlighting(contentEl, path);
+    reapplyHighlights();
   }catch(err){
     contentEl.innerHTML = `<div class="state">找不到這篇筆記，或讀取失敗。<br><a href="首頁.html">回首頁</a></div>`;
   }
